@@ -1,0 +1,17 @@
+name: json_canonicalizer
+description: A dependency-free RFC 8785 JSON Canonicalization Scheme implementation for Dart.
+version: 1.0.0
+repository: https://github.com/lymn310s/json-canonicalizer-dart
+issue_tracker: https://github.com/lymn310s/json-canonicalizer-dart/issues
+
+topics:
+  - canonicalization
+  - cryptography
+  - json
+  - rfc-8785
+
+environment:
+  sdk: ^3.3.0
+
+dev_dependencies:
+  test: ^1.25.8
