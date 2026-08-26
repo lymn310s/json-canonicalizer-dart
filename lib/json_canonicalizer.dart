@@ -26,16 +26,24 @@ final class JsonCanonicalizationException implements Exception {
 /// Canonicalizes parsed I-JSON [value] according to RFC 8785.
 ///
 /// Throws [JsonCanonicalizationException] for invalid JSON values.
-String canonicalize(Object? value) {
+///
+/// Dart strings can contain a lone UTF-16 surrogate, which is not valid
+/// Unicode. RFC 8785 requires rejecting it. Set [allowInvalidUnicode] to
+/// escape it as `\uXXXX` instead. The output is valid JSON but no longer an
+/// RFC 8785 canonical form.
+String canonicalize(Object? value, {bool allowInvalidUnicode = false}) {
   final output = StringBuffer();
   final activeContainers = HashSet<Object>.identity();
-  _write(output, value, activeContainers);
+  _write(output, value, activeContainers, allowInvalidUnicode);
   return output.toString();
 }
 
-/// Canonicalizes [value] as UTF-8 bytes.
-Uint8List canonicalizeUtf8(Object? value) =>
-    Uint8List.fromList(utf8.encode(canonicalize(value)));
+/// Canonicalizes [value] as UTF-8 bytes. See [canonicalize].
+Uint8List canonicalizeUtf8(Object? value, {bool allowInvalidUnicode = false}) =>
+    Uint8List.fromList(
+      utf8.encode(
+          canonicalize(value, allowInvalidUnicode: allowInvalidUnicode)),
+    );
 
 sealed class _ContainerFrame {}
 
@@ -82,6 +90,7 @@ void _write(
   StringBuffer output,
   Object? value,
   HashSet<Object> activeContainers,
+  bool allowInvalidUnicode,
 ) {
   final frames = <_ContainerFrame>[];
   var currentValue = value;
@@ -96,7 +105,7 @@ void _write(
     } else if (currentValue is num) {
       _writeNumber(output, currentValue, path);
     } else if (currentValue is String) {
-      _writeString(output, currentValue, path);
+      _writeString(output, currentValue, path, allowInvalidUnicode);
     } else if (currentValue is List<Object?>) {
       _enterContainer(currentValue, path, activeContainers);
       output.write('[');
@@ -116,7 +125,7 @@ void _write(
         frames.add(_ObjectFrame(currentValue, path, keys));
         final key = keys.first;
         path = path.child(key);
-        _writeString(output, key, path);
+        _writeString(output, key, path, allowInvalidUnicode);
         output.write(':');
         currentValue = currentValue[key];
         continue;
@@ -152,7 +161,7 @@ void _write(
         output.write(',');
         final key = objectFrame.keys[objectFrame.index];
         path = objectFrame.path.child(key);
-        _writeString(output, key, path);
+        _writeString(output, key, path, allowInvalidUnicode);
         output.write(':');
         currentValue = objectFrame.value[key];
         continue serialize;
@@ -238,6 +247,7 @@ void _writeString(
   StringBuffer output,
   String value,
   _Path path,
+  bool allowInvalidUnicode,
 ) {
   output.write('"');
   for (var index = 0; index < value.length; index++) {
@@ -248,10 +258,14 @@ void _writeString(
     } else if (codeUnit < 0x20) {
       _writeUnicodeEscape(output, codeUnit);
     } else if (_isLoneSurrogate(value, index, codeUnit)) {
-      throw JsonCanonicalizationException(
-        'string contains a lone UTF-16 surrogate',
-        path: path.pointer,
-      );
+      if (!allowInvalidUnicode) {
+        throw JsonCanonicalizationException(
+          'string contains a lone UTF-16 surrogate',
+          path: path.pointer,
+        );
+      }
+      // utf8.encode would replace it with U+FFFD. Escape instead.
+      _writeUnicodeEscape(output, codeUnit);
     } else {
       output.writeCharCode(codeUnit);
     }

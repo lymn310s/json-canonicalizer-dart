@@ -11,10 +11,14 @@ dart pub add json_canonicalizer
 
 ## Usage
 
+Both accept an already-parsed JSON value.
+
 - `canonicalize(value)` returns canonical JSON as a `String`.
 - `canonicalizeUtf8(value)` returns the same JSON as UTF-8 bytes for hashing or signing.
 
-Both accept an already-parsed JSON value.
+Both also take `allowInvalidUnicode`. Pass `true` to escape a lone UTF-16
+surrogate as `\uXXXX` instead of throwing. RFC 8785 requires rejecting a lone
+surrogate, but Dart strings can contain one from truncated or malformed input.
 
 ## Examples
 
@@ -32,6 +36,14 @@ canonicalize(<Object?>[-0.0, 333333333.33333329, 1e30, 0.000001]);
 // Returns UTF-8 bytes for hashing or signing.
 canonicalizeUtf8({'currency': '€'});
 // [123, 34, 99, 117, 114, 114, 101, 110, 99, 121, 34, 58, 34, 226, 130, 172, 34, 125]
+
+// A lone surrogate throws by default.
+canonicalize('a\ud800b');
+// Throws JsonCanonicalizationException.
+
+// allowInvalidUnicode escapes it instead.
+canonicalize('a\ud800b', allowInvalidUnicode: true);
+// "a\ud800b"
 ```
 
 ## Boundaries
@@ -47,7 +59,8 @@ hash, sign, or call `toJson`.
 | Object keys | Sort by UTF-16 code units. |
 | Strings | Escape control characters, quotes, and backslashes. Keep other Unicode unchanged. |
 | `-0.0` | Writes `0`. |
-| `NaN`, infinity, lossy `int`, lone surrogate, non-string key, cycle | Throw `JsonCanonicalizationException`. |
+| `NaN`, infinity, lossy `int`, non-string key, cycle | Throw `JsonCanonicalizationException`. |
+| Lone surrogate | Throws, unless you pass `allowInvalidUnicode`. |
 | Nested lists and maps | Work up to 100,000 levels deep. |
 
 Errors point to the invalid value with an RFC 6901 path:
@@ -68,7 +81,8 @@ try {
 The [test suite](https://github.com/lymn310s/json-canonicalizer-dart/blob/main/test/json_canonicalizer_test.dart)
 covers RFC 8785 examples,
 Appendix B number vectors, the upstream JCS corpus, Unicode, escaping, invalid
-input, cycles, shared subtrees, and 100,000-level lists and maps.
+input, cycles, shared subtrees, `allowInvalidUnicode`, and 100,000-level lists
+and maps.
 
 ## License
 

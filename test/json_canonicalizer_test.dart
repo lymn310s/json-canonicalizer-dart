@@ -281,6 +281,65 @@ void main() {
     });
   });
 
+  group('allowInvalidUnicode', () {
+    test('escapes a lone surrogate instead of throwing', () {
+      expect(
+        canonicalize(
+          <String, String>{'value': 'a\ud800b'},
+          allowInvalidUnicode: true,
+        ),
+        r'{"value":"a\ud800b"}',
+      );
+      expect(
+        canonicalize(
+          <String, String>{'\udc00': 'value'},
+          allowInvalidUnicode: true,
+        ),
+        r'{"\udc00":"value"}',
+      );
+    });
+
+    test('leaves valid Unicode alone', () {
+      expect(
+        canonicalize(
+          <String, String>{'emoji': 'a\u{1f600}b'},
+          allowInvalidUnicode: true,
+        ),
+        '{"emoji":"a\u{1f600}b"}',
+      );
+    });
+
+    test('keeps the escaped text readable by any JSON parser', () {
+      const truncated = 'hello \ud83d';
+      final text = canonicalize(truncated, allowInvalidUnicode: true);
+
+      expect(text, r'"hello \ud83d"');
+      expect(jsonDecode(text), truncated);
+      expect(canonicalize(jsonDecode(text), allowInvalidUnicode: true), text);
+    });
+
+    test('encodes UTF-8 without a replacement character', () {
+      expect(
+        canonicalizeUtf8('hello \ud83d', allowInvalidUnicode: true),
+        utf8.encode(r'"hello \ud83d"'),
+      );
+    });
+
+    test('relaxes nothing but Unicode', () {
+      expect(
+        () => canonicalize(double.nan, allowInvalidUnicode: true),
+        throwsA(isA<JsonCanonicalizationException>()),
+      );
+      expect(
+        () => canonicalize(
+          <Object?, Object?>{1: 'one'},
+          allowInvalidUnicode: true,
+        ),
+        throwsA(isA<JsonCanonicalizationException>()),
+      );
+    });
+  });
+
   group('deep containers', () {
     test('handles 100,000 nested arrays without using the call stack', () {
       Object? value = <Object?>[];
